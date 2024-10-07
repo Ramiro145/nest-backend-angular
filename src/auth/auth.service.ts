@@ -8,17 +8,24 @@ import * as bcryptjs from 'bcryptjs';
 import { User } from './entities/user.entity';
 import {Model} from 'mongoose';
 import { LoginDto } from './dto/login.dto';
+import { JwtService } from '@nestjs/jwt';
+import { JwtPayload } from './interfaces/jwt-payload';
+import { LoginResponse } from './interfaces/login-response';
+import { RegisterUserDto } from './dto/register-user.dto';
+import { retry } from 'rxjs';
 
 @Injectable()
 export class AuthService {
 
   constructor(
     @InjectModel(User.name) 
-    private userModel: Model<User>
+    private userModel: Model<User>,
+    private jwtService: JwtService
   ){
   }
 
   async create(createUserDto: CreateUserDto): Promise <User>{
+
     try {
 
       //! Encriptar password
@@ -47,7 +54,18 @@ export class AuthService {
     //* Generar JWT
   }
 
-  async login(loginDto:LoginDto){
+  async register(registerUserDto:RegisterUserDto):Promise<LoginResponse>{
+
+    const userCreated = await this.create(registerUserDto);
+
+    return {
+      user: userCreated,
+      token: this.getJwtToken({id: userCreated._id})
+    }
+
+  }
+
+  async login(loginDto:LoginDto):Promise<LoginResponse>{
     
     const {email, password} = loginDto;
 
@@ -66,16 +84,28 @@ export class AuthService {
     return{
       user: rest,
       //* generar token pendiente
-      token:'ABC-123'
+      token:this.getJwtToken({id: user.id}),
     }
   }
 
-  findAll() {
-    return `This action returns all auth`;
+  // async checkToken(token:string):Promise<LoginResponse>{
+
+  // }
+
+  findAll(): Promise<User[]> {
+    return this.userModel.find();
   }
 
   findOne(id: number) {
     return `This action returns a #${id} auth`;
+  }
+
+  async findUserById(id:string){
+    const user = await this.userModel.findById(id);
+
+    const {password, ...rest} = user.toJSON();
+
+    return rest;
   }
 
   update(id: number, updateAuthDto: UpdateAuthDto) {
@@ -85,4 +115,10 @@ export class AuthService {
   remove(id: number) {
     return `This action removes a #${id} auth`;
   }
+
+  getJwtToken(payload:JwtPayload){
+    const token = this.jwtService.sign(payload);
+    return token;
+  }
+
 }
